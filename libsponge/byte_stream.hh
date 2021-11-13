@@ -17,7 +17,8 @@ class ByteStream {
     // that's a sign that you probably want to keep exploring
     // different approaches.
     std::string _buffer;
-    uint32_t _len, _bytes_written = 0, _bytes_read = 0;
+    uint32_t _len;
+    mutable uint32_t _bytes_written = 0, _bytes_read = 0;
     bool _input_ended = false;
     bool _error = false;  //!< Flag indicating that the stream suffered an error.
 
