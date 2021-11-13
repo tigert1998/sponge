@@ -9,14 +9,16 @@
 
 using namespace std;
 
-ByteStream::ByteStream(const size_t capacity): _buffer(capacity, ' ') {
+ByteStream::ByteStream(const size_t capacity) : _buffer(capacity, ' ') {
     _len = 0;
+    _start = 0;
+    _capacity = capacity;
 }
 
 size_t ByteStream::write(const string &data) {
     uint32_t ret = std::min(data.size(), remaining_capacity());
     for (uint32_t i = 0; i < ret; i++) {
-        _buffer[i + _len] = data[i];
+        _buffer[(i + _start + _len) % _capacity] = data[i];
     }
     _len += ret;
     _bytes_written += ret;
@@ -25,15 +27,17 @@ size_t ByteStream::write(const string &data) {
 
 //! \param[in] len bytes will be copied from the output side of the buffer
 string ByteStream::peek_output(const size_t len) const {
-    return _buffer.substr(0, len);
+    std::string ret(len, ' ');
+    for (uint32_t i = 0; i < len; i++) {
+        ret[i] = _buffer[(_start + i) % _capacity];
+    }
+    return ret;
 }
 
 //! \param[in] len bytes will be removed from the output side of the buffer
 void ByteStream::pop_output(const size_t len) {
+    _start = (_start + len) % _capacity;
     _bytes_read += len;
-    for (uint32_t i = 0; i < _len - len; i++) {
-        _buffer[i] = _buffer[i + len];
-    }
     _len -= len;
 }
 
@@ -58,4 +62,4 @@ size_t ByteStream::bytes_written() const { return _bytes_written; }
 
 size_t ByteStream::bytes_read() const { return _bytes_read; }
 
-size_t ByteStream::remaining_capacity() const { return _buffer.size() - _len; }
+size_t ByteStream::remaining_capacity() const { return _capacity - _len; }
