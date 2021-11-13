@@ -1,5 +1,6 @@
 #include "tun.hh"
 
+#include "sys/socket.h"
 #include "util.hh"
 
 #include <cstring>
