@@ -14,10 +14,10 @@ class StreamReassembler {
     // Your code here -- add private members as necessary.
 
     ByteStream _output;  //!< The reassembled in-order byte stream
-    uint32_t _capacity;  //!< The maximum number of bytes
+    uint64_t _capacity;  //!< The maximum number of bytes
     std::string _buffer;
-    uint32_t _start, _start_index;
-    uint32_t _unassembled_bytes;
+    uint64_t _start, _start_index;
+    uint64_t _unassembled_bytes;
     bool _eof;
     std::unique_ptr<bool[]> _filled;
 
