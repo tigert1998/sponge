@@ -6,6 +6,7 @@
 #include "tcp_segment.hh"
 #include "wrapping_integers.hh"
 
+#include <memory>
 #include <optional>
 
 //! \brief The "receiver" part of a TCP implementation.
@@ -16,9 +17,10 @@
 class TCPReceiver {
     //! Our data structure for re-assembling bytes.
     StreamReassembler _reassembler;
+    std::unique_ptr<WrappingInt32> _isn;
 
     //! The maximum number of bytes we'll store.
-    size_t _capacity;
+    uint64_t _capacity;
 
   public:
     //! \brief Construct a TCP receiver
