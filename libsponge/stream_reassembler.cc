@@ -29,19 +29,19 @@ StreamReassembler::StreamReassembler(const size_t capacity)
 //! possibly out-of-order, from the logical stream, and assembles any newly
 //! contiguous substrings and writes them into the output stream in order.
 void StreamReassembler::push_substring(const string &data, const size_t index, const bool eof) {
-    uint32_t from = 0;
+    uint64_t from = 0;
     if (index < _start_index) {
         from = _start_index - index;
     }
 
-    uint32_t size = std::min(data.size(), _capacity - _output.buffer_size() - index + _start_index);
-    for (uint32_t i = from; i < size; i++) {
+    uint64_t size = std::min(data.size(), _capacity - _output.buffer_size() - index + _start_index);
+    for (uint64_t i = from; i < size; i++) {
         auto j = (i + _start + index - _start_index) % _capacity;
         _buffer[j] = data[i];
         _unassembled_bytes += !_filled[j];
         _filled[j] = true;
     }
-    uint32_t i = 0;
+    uint64_t i = 0;
     std::stringstream ss;
     while (true) {
         auto j = (_start + i) % _capacity;

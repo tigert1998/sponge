@@ -16,8 +16,8 @@ ByteStream::ByteStream(const size_t capacity) : _buffer(capacity, ' ') {
 }
 
 size_t ByteStream::write(const string &data) {
-    uint32_t ret = std::min(data.size(), remaining_capacity());
-    for (uint32_t i = 0; i < ret; i++) {
+    uint64_t ret = std::min(data.size(), remaining_capacity());
+    for (uint64_t i = 0; i < ret; i++) {
         _buffer[(i + _start + _len) % _capacity] = data[i];
     }
     _len += ret;
@@ -28,7 +28,7 @@ size_t ByteStream::write(const string &data) {
 //! \param[in] len bytes will be copied from the output side of the buffer
 string ByteStream::peek_output(const size_t len) const {
     std::string ret(len, ' ');
-    for (uint32_t i = 0; i < len; i++) {
+    for (uint64_t i = 0; i < len; i++) {
         ret[i] = _buffer[(_start + i) % _capacity];
     }
     return ret;
