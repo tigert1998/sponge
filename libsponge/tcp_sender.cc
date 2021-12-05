@@ -19,9 +19,33 @@ TCPSender::TCPSender(const size_t capacity, const uint16_t retx_timeout, const s
     _rto = _initial_retransmission_timeout;
 }
 
-uint64_t TCPSender::bytes_in_flight() const { return {}; }
+uint64_t TCPSender::bytes_in_flight() const { return _bytes_in_flight; }
 
-void TCPSender::fill_window() {}
+void TCPSender::fill_window() {
+    uint16_t window_size;
+    if (_last_window_size.has_value()) {
+        window_size = std::max(static_cast<uint16_t>(1), *_last_window_size);
+    } else {
+        window_size = 1;
+    }
+
+    bool syn = _next_seqno == 0;
+    bool fin = _stream.eof() && _stream.buffer_size() <= window_size - syn - 1;
+
+    uint64_t str_size = std::min(TCPConfig::MAX_PAYLOAD_SIZE, _stream.buffer_size());
+    str_size = std::min(str_size, static_cast<uint64_t>(window_size - syn - fin));
+
+    TCPSegment segment;
+    segment.header().seqno = wrap(_next_seqno, _isn);
+    segment.header().syn = syn;
+    segment.header().fin = fin;
+    segment.payload() = Buffer(_stream.read(str_size));
+    _segments_out.push(segment);
+    _outstanding_segments.emplace(_next_seqno, segment);
+
+    _bytes_in_flight += str_size + syn + fin;
+    _next_seqno += str_size + syn + fin;
+}
 
 //! \param ackno The remote receiver's ackno (acknowledgment number)
 //! \param window_size The remote receiver's advertised window size
@@ -35,7 +59,7 @@ void TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_si
             new_data = true;
         }
     } else {
-        _last_ackno = ackno.raw_value();
+        _last_ackno = unwrap(ackno, _isn, 0);
         _last_window_size = window_size;
         new_data = true;
     }
@@ -46,37 +70,50 @@ void TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_si
     _rto = _initial_retransmission_timeout;
     _consecutive_retransmissions = 0;
 
-    std::vector<TCPSegment> segments;
+    std::vector<std::pair<uint64_t, TCPSegment>> segments;
     for (auto kv : _outstanding_segments) {
         TCPSegment segment = kv.second;
-        if (unwrap(segment.header().seqno, _isn, *_last_ackno) + segment.length_in_sequence_space() > _last_ackno) {
-            segments.push_back(segment);
+        uint64_t seqno = kv.first;
+        if (seqno + segment.length_in_sequence_space() > _last_ackno) {
+            segments.emplace_back(seqno, segment);
         }
     }
     _outstanding_segments.clear();
-    for (const auto &segment : segments) {
-        _outstanding_segments.insert({_ms, segment});
+    _bytes_in_flight = 0;
+    for (const auto &kv : segments) {
+        _outstanding_segments.insert(kv);
+        _bytes_in_flight += kv.second.length_in_sequence_space();
+    }
+
+    if (_outstanding_segments.empty()) {
+        _timer_ms = std::nullopt;
+    } else {
+        _timer_ms = _ms;
     }
 }
 
 //! \param[in] ms_since_last_tick the number of milliseconds since the last call to this method
 void TCPSender::tick(const size_t ms_since_last_tick) {
     _ms += ms_since_last_tick;
-    while (1) {
-        if (_outstanding_segments.empty())
-            return;
+    if (!_timer_ms.has_value())
+        return;
+    if (_ms - *_timer_ms >= _rto) {
+        _timer_ms = _ms;
         auto iter = _outstanding_segments.begin();
-        if (_ms - iter->first >= _rto) {
-            auto segment = iter->second;
-            _outstanding_segments.erase(iter);
-            _segments_out.push(segment);
-            _outstanding_segments.insert({_ms, segment});
-            _consecutive_retransmissions += 1;
-            _rto *= 2;
-        }
+        auto segment = iter->second;
+        _segments_out.push(segment);
+        _consecutive_retransmissions += 1;
+        _rto *= 2;
     }
 }
 
 unsigned int TCPSender::consecutive_retransmissions() const { return _consecutive_retransmissions; }
 
-void TCPSender::send_empty_segment() {}
+void TCPSender::send_empty_segment() {
+    TCPSegment segment;
+    segment.header().seqno = wrap(_next_seqno, _isn);
+    segment.header().syn = false;
+    segment.header().fin = false;
+    segment.payload() = Buffer("");
+    _segments_out.push(segment);
+}

@@ -8,6 +8,7 @@
 
 #include <functional>
 #include <map>
+#include <optional>
 #include <queue>
 #include <vector>
 
@@ -34,12 +35,14 @@ class TCPSender {
     //! the (absolute) sequence number for the next byte to be sent
     uint64_t _next_seqno{0};
 
-    std::multimap<uint64_t, TCPSegment> _outstanding_segments;
+    std::map<uint64_t, TCPSegment> _outstanding_segments;
     uint64_t _ms = 0;
+    std::optional<uint64_t> _timer_ms;
     uint64_t _rto;
     uint32_t _consecutive_retransmissions = 0;
     std::optional<uint64_t> _last_ackno;
     std::optional<uint16_t> _last_window_size;
+    uint64_t _bytes_in_flight;
 
   public:
     //! Initialize a TCPSender
