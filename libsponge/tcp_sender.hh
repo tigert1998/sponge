@@ -43,7 +43,7 @@ class TCPSender {
     std::optional<uint64_t> _last_ackno;
     std::optional<uint16_t> _last_window_size;
     uint64_t _bytes_in_flight = 0;
-    bool _fin_sent = false;
+    bool _fin_sent = false, _zero_window_size = false;
 
   public:
     //! Initialize a TCPSender

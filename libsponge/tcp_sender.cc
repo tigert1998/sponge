@@ -65,7 +65,8 @@ void TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_si
 
     auto update_ackno_and_window_size = [=]() {
         _last_ackno = current_ackno;
-        uint16_t new_window_size = window_size == 0 ? 1 : window_size;
+        this->_zero_window_size = window_size == 0;
+        uint16_t new_window_size = this->_zero_window_size ? 1 : window_size;
         _last_window_size = static_cast<uint64_t>(
             std::max(0l, static_cast<int64_t>(current_ackno) + new_window_size - static_cast<int64_t>(_next_seqno)));
     };
@@ -117,8 +118,10 @@ void TCPSender::tick(const size_t ms_since_last_tick) {
         auto iter = _outstanding_segments.begin();
         auto segment = iter->second;
         _segments_out.push(segment);
-        _consecutive_retransmissions += 1;
-        _rto *= 2;
+        if (!_zero_window_size) {
+            _consecutive_retransmissions += 1;
+            _rto *= 2;
+        }
     }
 }
 
