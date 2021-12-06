@@ -40,6 +40,11 @@ void TCPSender::fill_window() {
     segment.header().syn = syn;
     segment.header().fin = fin;
     segment.payload() = Buffer(_stream.read(str_size));
+
+    if (str_size + syn + fin == 0) {
+        return;
+    }
+
     _segments_out.push(segment);
     _outstanding_segments.emplace(_next_seqno, segment);
 
