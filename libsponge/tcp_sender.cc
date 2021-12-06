@@ -24,13 +24,14 @@ uint64_t TCPSender::bytes_in_flight() const { return _bytes_in_flight; }
 void TCPSender::fill_window() {
     uint16_t window_size;
     if (_last_window_size.has_value()) {
-        window_size = std::max(static_cast<uint16_t>(1), *_last_window_size);
+        window_size = *_last_window_size;
     } else {
         window_size = 1;
     }
 
     bool syn = _next_seqno == 0;
-    bool fin = _stream.eof() && _stream.buffer_size() <= window_size - syn - 1;
+    bool fin = _stream.input_ended() &&
+               (static_cast<int64_t>(_stream.buffer_size()) <= static_cast<int64_t>(window_size) - syn - 1);
 
     uint64_t str_size = std::min(TCPConfig::MAX_PAYLOAD_SIZE, _stream.buffer_size());
     str_size = std::min(str_size, static_cast<uint64_t>(window_size - syn - fin));
@@ -51,8 +52,9 @@ void TCPSender::fill_window() {
     _segments_out.push(segment);
     _outstanding_segments.emplace(_next_seqno, segment);
 
-    _bytes_in_flight += str_size + syn + fin;
-    _next_seqno += str_size + syn + fin;
+    _bytes_in_flight += segment.length_in_sequence_space();
+    _next_seqno += segment.length_in_sequence_space();
+    *_last_window_size -= segment.length_in_sequence_space();
 
     if (!_timer_ms.has_value()) {
         _timer_ms = _ms;
@@ -63,24 +65,27 @@ void TCPSender::fill_window() {
 //! \param window_size The remote receiver's advertised window size
 void TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_size) {
     bool new_data = false;
+    uint64_t current_ackno = unwrap(ackno, _isn, _last_ackno.has_value() ? *_last_ackno : 0);
+
+    auto update_ackno_and_window_size = [this, current_ackno, window_size]() {
+        _last_ackno = current_ackno;
+        _last_window_size = static_cast<uint64_t>(
+            std::max(0l, static_cast<int64_t>(current_ackno) + window_size - static_cast<int64_t>(_next_seqno)));
+        _last_window_size = std::max(static_cast<uint16_t>(1), *_last_window_size);
+    };
+
     if (_last_ackno.has_value()) {
-        uint64_t current_ackno = unwrap(ackno, _isn, *_last_ackno);
-        if (current_ackno > _last_ackno && current_ackno <= _next_seqno) {
-            _last_ackno = current_ackno;
-            _last_window_size = window_size;
-            new_data = true;
+        if (current_ackno >= _last_ackno && current_ackno <= _next_seqno) {
+            new_data = current_ackno > _last_ackno;
+            update_ackno_and_window_size();
         }
-    } else if (unwrap(ackno, _isn, 0) <= _next_seqno) {
-        _last_ackno = unwrap(ackno, _isn, 0);
-        _last_window_size = window_size;
+    } else if (current_ackno <= _next_seqno) {
         new_data = true;
+        update_ackno_and_window_size();
     }
     if (!new_data) {
         return;
     }
-
-    _rto = _initial_retransmission_timeout;
-    _consecutive_retransmissions = 0;
 
     std::vector<std::pair<uint64_t, TCPSegment>> segments;
     for (auto kv : _outstanding_segments) {
@@ -97,6 +102,8 @@ void TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_si
         _bytes_in_flight += kv.second.length_in_sequence_space();
     }
 
+    _rto = _initial_retransmission_timeout;
+    _consecutive_retransmissions = 0;
     if (_outstanding_segments.empty()) {
         _timer_ms = std::nullopt;
     } else {
