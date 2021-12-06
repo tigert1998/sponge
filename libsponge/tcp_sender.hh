@@ -42,7 +42,8 @@ class TCPSender {
     uint32_t _consecutive_retransmissions = 0;
     std::optional<uint64_t> _last_ackno;
     std::optional<uint16_t> _last_window_size;
-    uint64_t _bytes_in_flight;
+    uint64_t _bytes_in_flight = 0;
+    bool _fin_sent = false;
 
   public:
     //! Initialize a TCPSender

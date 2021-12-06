@@ -41,8 +41,11 @@ void TCPSender::fill_window() {
     segment.header().fin = fin;
     segment.payload() = Buffer(_stream.read(str_size));
 
-    if (str_size + syn + fin == 0) {
+    if (_fin_sent || str_size + syn + fin == 0) {
         return;
+    }
+    if (fin) {
+        _fin_sent = true;
     }
 
     _segments_out.push(segment);
@@ -50,6 +53,10 @@ void TCPSender::fill_window() {
 
     _bytes_in_flight += str_size + syn + fin;
     _next_seqno += str_size + syn + fin;
+
+    if (!_timer_ms.has_value()) {
+        _timer_ms = _ms;
+    }
 }
 
 //! \param ackno The remote receiver's ackno (acknowledgment number)
@@ -58,12 +65,12 @@ void TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_si
     bool new_data = false;
     if (_last_ackno.has_value()) {
         uint64_t current_ackno = unwrap(ackno, _isn, *_last_ackno);
-        if (current_ackno > _last_ackno) {
+        if (current_ackno > _last_ackno && current_ackno <= _next_seqno) {
             _last_ackno = current_ackno;
             _last_window_size = window_size;
             new_data = true;
         }
-    } else {
+    } else if (unwrap(ackno, _isn, 0) <= _next_seqno) {
         _last_ackno = unwrap(ackno, _isn, 0);
         _last_window_size = window_size;
         new_data = true;
