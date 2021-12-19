@@ -26,7 +26,7 @@ class TCPConnection {
 
     void send_rst();
     void send_segment(const TCPSegment &seg);
-    void pop_and_send_all_segments();
+    bool pop_and_send_all_segments();
 
   public:
     //! \name "Input" interface for the writer

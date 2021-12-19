@@ -2,11 +2,6 @@
 
 #include <iostream>
 
-// Dummy implementation of a TCP connection
-
-// For Lab 4, please replace with a real implementation that passes the
-// automated checks run by `make check`.
-
 void TCPConnection::send_segment(const TCPSegment &seg) {
     auto new_seg = seg;
     if (_receiver.ackno() != std::nullopt) {
@@ -16,11 +11,14 @@ void TCPConnection::send_segment(const TCPSegment &seg) {
     _segments_out.push(new_seg);
 }
 
-void TCPConnection::pop_and_send_all_segments() {
+bool TCPConnection::pop_and_send_all_segments() {
+    bool ret = false;
     while (!_sender.segments_out().empty()) {
+        ret = true;
         send_segment(_sender.segments_out().front());
         _sender.segments_out().pop();
     }
+    return ret;
 }
 
 void TCPConnection::send_rst() {
@@ -57,6 +55,11 @@ void TCPConnection::segment_received(const TCPSegment &seg) {
         _receiver.segment_received(seg);
         if (seg.header().ack) {
             _sender.ack_received(seg.header().ackno, seg.header().win);
+        }
+        _sender.fill_window();
+        if (!pop_and_send_all_segments() && seg.length_in_sequence_space() >= 1) {
+            _sender.send_empty_segment();
+            pop_and_send_all_segments();
         }
     }
 }
