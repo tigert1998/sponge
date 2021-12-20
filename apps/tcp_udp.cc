@@ -12,8 +12,6 @@
 
 using namespace std;
 
-constexpr uint16_t DPORT_DFLT = 1440;
-
 static void show_usage(const char *argv0, const char *msg) {
     cout << "Usage: " << argv0 << " [options] <host> <port>\n\n"
 

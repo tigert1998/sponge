@@ -9,6 +9,7 @@ void TCPConnection::send_segment(const TCPSegment &seg) {
         new_seg.header().ackno = *_receiver.ackno();
     }
     new_seg.header().win = _receiver.window_size();
+    _fin_sent |= new_seg.header().fin;
     _segments_out.push(new_seg);
 }
 
@@ -55,6 +56,19 @@ void TCPConnection::segment_received(const TCPSegment &seg) {
             _sender.ack_received(seg.header().ackno, seg.header().win);
         }
 
+        if (_fin_sent) {
+            if (seg.header().ackno == _sender.next_seqno()) {
+                // this->sender's fin is now acked
+                _fin_sent_and_acked = true;
+                if (!_linger_after_streams_finish) {
+                    _active = false;
+                }
+            }
+        }
+        if (_receiver.stream_out().input_ended() && !_fin_sent) {
+            _linger_after_streams_finish = false;
+        }
+
         if (_receiver.ackno() != std::nullopt) {
             _sender.fill_window();
             if (_sender.segments_out().empty() && seg.length_in_sequence_space() >= 1) {
@@ -78,6 +92,13 @@ size_t TCPConnection::write(const std::string &data) {
 void TCPConnection::tick(const size_t ms_since_last_tick) {
     _ms += ms_since_last_tick;
     _sender.tick(ms_since_last_tick);
+
+    if (time_since_last_segment_received() >= 10 * _cfg.rt_timeout) {
+        if (_fin_sent_and_acked && _receiver.stream_out().input_ended()) {
+            _active = false;
+        }
+    }
+
     if (_sender.consecutive_retransmissions() <= TCPConfig::MAX_RETX_ATTEMPTS) {
         pop_and_send_all_segments();
     } else {

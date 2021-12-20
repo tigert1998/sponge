@@ -23,6 +23,7 @@ class TCPConnection {
 
     bool _active = true;
     uint64_t _segment_received_ms, _ms = 0;
+    bool _fin_sent = false, _fin_sent_and_acked = false;
 
     void send_rst();
     void send_segment(const TCPSegment &seg);

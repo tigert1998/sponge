@@ -14,14 +14,11 @@ void TCPReceiver::segment_received(const TCPSegment &seg) {
         }
     } else {
         uint64_t abs_seqno = unwrap(seqno, *_isn, _reassembler.stream_out().bytes_written() + 1);
-        uint64_t stream_index;
-        std::string data = std::string(seg.payload().str());
         if (abs_seqno == 0) {
-            data = data.substr(1);
-            stream_index = 0;
-        } else {
-            stream_index = abs_seqno - 1;
+            return;
         }
+        uint64_t stream_index = abs_seqno - 1;
+        std::string data = std::string(seg.payload().str());
         _reassembler.push_substring(data, stream_index, seg.header().fin);
     }
 }
