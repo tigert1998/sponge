@@ -72,7 +72,7 @@ void TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_si
     };
 
     if (_last_ackno.has_value()) {
-        if (current_ackno >= _last_ackno && current_ackno <= _next_seqno) {
+        if (_last_ackno <= current_ackno && current_ackno <= _next_seqno) {
             new_data = current_ackno > _last_ackno;
             update_ackno_and_window_size();
         }

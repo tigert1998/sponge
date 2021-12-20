@@ -8,6 +8,7 @@ void TCPConnection::send_segment(const TCPSegment &seg) {
         new_seg.header().ack = true;
         new_seg.header().ackno = *_receiver.ackno();
     }
+    new_seg.header().win = _receiver.window_size();
     _segments_out.push(new_seg);
 }
 
