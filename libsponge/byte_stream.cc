@@ -9,11 +9,7 @@
 
 using namespace std;
 
-ByteStream::ByteStream(const size_t capacity) : _buffer(capacity, ' ') {
-    _len = 0;
-    _start = 0;
-    _capacity = capacity;
-}
+ByteStream::ByteStream(const size_t capacity) : _buffer(capacity, ' '), _len(0), _start(0), _capacity(capacity) {}
 
 size_t ByteStream::write(const string &data) {
     uint64_t ret = std::min(data.size(), remaining_capacity());

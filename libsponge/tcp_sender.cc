@@ -15,10 +15,8 @@
 TCPSender::TCPSender(const size_t capacity, const uint16_t retx_timeout, const std::optional<WrappingInt32> fixed_isn)
     : _isn(fixed_isn.value_or(WrappingInt32{std::random_device()()}))
     , _initial_retransmission_timeout{retx_timeout}
-    , _stream(capacity) {
-    _rto = _initial_retransmission_timeout;
-    _last_window_size = 1;
-}
+    , _stream(capacity)
+    , _rto(_initial_retransmission_timeout) {}
 
 uint64_t TCPSender::bytes_in_flight() const { return _bytes_in_flight; }
 
