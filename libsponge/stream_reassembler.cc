@@ -19,7 +19,8 @@ StreamReassembler::StreamReassembler(const size_t capacity)
     , _start(0)
     , _start_index(0)
     , _unassembled_bytes(0)
-    , _eof(false) {
+    , _eof(false)
+    , _filled(nullptr) {
     _filled.reset(new bool[_capacity]);
     for (uint32_t i = 0; i < _capacity; i++)
         _filled[i] = false;

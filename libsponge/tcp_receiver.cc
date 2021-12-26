@@ -13,8 +13,13 @@ void TCPReceiver::segment_received(const TCPSegment &seg) {
             _reassembler.push_substring(std::string(seg.payload().str()), 0, seg.header().fin);
         }
     } else {
-        uint64_t index = unwrap(seqno, *_isn, _reassembler.stream_out().bytes_written() + 1) - 1;
-        _reassembler.push_substring(std::string(seg.payload().str()), index, seg.header().fin);
+        uint64_t abs_seqno = unwrap(seqno, *_isn, _reassembler.stream_out().bytes_written() + 1);
+        if (abs_seqno == 0) {
+            return;
+        }
+        uint64_t stream_index = abs_seqno - 1;
+        std::string data = std::string(seg.payload().str());
+        _reassembler.push_substring(data, stream_index, seg.header().fin);
     }
 }
 

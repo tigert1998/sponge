@@ -15,21 +15,20 @@
 TCPSender::TCPSender(const size_t capacity, const uint16_t retx_timeout, const std::optional<WrappingInt32> fixed_isn)
     : _isn(fixed_isn.value_or(WrappingInt32{std::random_device()()}))
     , _initial_retransmission_timeout{retx_timeout}
-    , _stream(capacity) {
-    _rto = _initial_retransmission_timeout;
-    _last_window_size = 1;
-}
+    , _stream(capacity)
+    , _rto(_initial_retransmission_timeout) {}
 
 uint64_t TCPSender::bytes_in_flight() const { return _bytes_in_flight; }
 
 void TCPSender::fill_window() {
     while (1) {
         bool syn = _next_seqno == 0;
-        bool fin = _stream.input_ended() &&
+        bool fin = _stream.input_ended() && _stream.buffer_size() <= TCPConfig::MAX_PAYLOAD_SIZE &&
                    (static_cast<int64_t>(_stream.buffer_size()) <= static_cast<int64_t>(*_last_window_size) - syn - 1);
 
-        uint64_t str_size = std::min(TCPConfig::MAX_PAYLOAD_SIZE, _stream.buffer_size());
-        str_size = std::min(str_size, static_cast<uint64_t>(*_last_window_size - syn - fin));
+        uint64_t str_size = std::min({TCPConfig::MAX_PAYLOAD_SIZE,
+                                      _stream.buffer_size(),
+                                      static_cast<uint64_t>(*_last_window_size - syn - fin)});
 
         TCPSegment segment;
         segment.header().seqno = wrap(_next_seqno, _isn);
@@ -72,7 +71,7 @@ void TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_si
     };
 
     if (_last_ackno.has_value()) {
-        if (current_ackno >= _last_ackno && current_ackno <= _next_seqno) {
+        if (_last_ackno <= current_ackno && current_ackno <= _next_seqno) {
             new_data = current_ackno > _last_ackno;
             update_ackno_and_window_size();
         }

@@ -35,13 +35,13 @@ class TCPSender {
     //! the (absolute) sequence number for the next byte to be sent
     uint64_t _next_seqno{0};
 
-    std::map<uint64_t, TCPSegment> _outstanding_segments;
+    std::map<uint64_t, TCPSegment> _outstanding_segments{};
     uint64_t _ms = 0;
-    std::optional<uint64_t> _timer_ms;
+    std::optional<uint64_t> _timer_ms = std::nullopt;
     uint64_t _rto;
     uint32_t _consecutive_retransmissions = 0;
-    std::optional<uint64_t> _last_ackno;
-    std::optional<uint16_t> _last_window_size;
+    std::optional<uint64_t> _last_ackno = std::nullopt;
+    std::optional<uint16_t> _last_window_size = 1;
     uint64_t _bytes_in_flight = 0;
     bool _fin_sent = false, _zero_window_size = false;
 
