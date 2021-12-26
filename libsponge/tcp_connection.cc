@@ -2,23 +2,6 @@
 
 #include <iostream>
 
-namespace {
-void log(const TCPConnection *conn, const char *msg, const TCPSegment &seg) {
-    fprintf(stderr,
-            "[%s] <%p> (%c%c%c)\tseq=%u\tack=%s\twin=%5u\tlen(payload)=%lu\n",
-            msg,
-            reinterpret_cast<const void *>(conn),
-            seg.header().syn ? 'S' : ' ',
-            seg.header().fin ? 'F' : ' ',
-            seg.header().rst ? 'R' : ' ',
-            seg.header().seqno.raw_value(),
-            seg.header().ack ? std::to_string(seg.header().ackno.raw_value()).c_str() : ".",
-            seg.header().win,
-            seg.payload().size());
-    fflush(stderr);
-}
-}  // namespace
-
 void TCPConnection::send_segment(const TCPSegment &seg) {
     auto new_seg = seg;
     if (_receiver.ackno() != std::nullopt) {
@@ -28,7 +11,6 @@ void TCPConnection::send_segment(const TCPSegment &seg) {
     new_seg.header().win = _receiver.window_size();
     _fin_sent |= new_seg.header().fin;
     _segments_out.push(new_seg);
-    log(this, "SEND", new_seg);
 }
 
 void TCPConnection::pop_and_send_all_segments() {
@@ -63,7 +45,6 @@ size_t TCPConnection::unassembled_bytes() const { return _receiver.unassembled_b
 size_t TCPConnection::time_since_last_segment_received() const { return _ms - _segment_received_ms; }
 
 void TCPConnection::segment_received(const TCPSegment &seg) {
-    log(this, "RECV", seg);
     _segment_received_ms = _ms;
     if (seg.header().rst) {
         _active = false;
