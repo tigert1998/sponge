@@ -1,5 +1,6 @@
 #include "tcp_sponge_socket.hh"
 
+#include "network_interface.hh"
 #include "parser.hh"
 #include "tun.hh"
 #include "util.hh"
@@ -72,23 +73,23 @@ void TCPSpongeSocket<AdaptT>::_initialize_TCP(const TCPConfig &config) {
     //    given to underlying datagram socket)
 
     // rule 1: read from filtered packet stream and dump into TCPConnection
-    _eventloop.add_rule(_datagram_adapter,
-                        Direction::In,
-                        [&] {
-                            auto seg = _datagram_adapter.read();
-                            if (seg) {
-                                _tcp->segment_received(move(seg.value()));
-                            }
+    _eventloop.add_rule(
+        _datagram_adapter,
+        Direction::In,
+        [&] {
+            auto seg = _datagram_adapter.read();
+            if (seg) {
+                _tcp->segment_received(move(seg.value()));
+            }
 
-                            // debugging output:
-                            if (_thread_data.eof() and _tcp.value().bytes_in_flight() == 0 and not _fully_acked) {
-                                cerr << "DEBUG: Outbound stream to "
-                                     << _datagram_adapter.config().destination.to_string()
-                                     << " has been fully acknowledged.\n";
-                                _fully_acked = true;
-                            }
-                        },
-                        [&] { return _tcp->active(); });
+            // debugging output:
+            if (_thread_data.eof() and _tcp.value().bytes_in_flight() == 0 and not _fully_acked) {
+                cerr << "DEBUG: Outbound stream to " << _datagram_adapter.config().destination.to_string()
+                     << " has been fully acknowledged.\n";
+                _fully_acked = true;
+            }
+        },
+        [&] { return _tcp->active(); });
 
     // rule 2: read from pipe into outbound buffer
     _eventloop.add_rule(
@@ -150,15 +151,16 @@ void TCPSpongeSocket<AdaptT>::_initialize_TCP(const TCPConfig &config) {
         });
 
     // rule 4: read outbound segments from TCPConnection and send as datagrams
-    _eventloop.add_rule(_datagram_adapter,
-                        Direction::Out,
-                        [&] {
-                            while (not _tcp->segments_out().empty()) {
-                                _datagram_adapter.write(_tcp->segments_out().front());
-                                _tcp->segments_out().pop();
-                            }
-                        },
-                        [&] { return not _tcp->segments_out().empty(); });
+    _eventloop.add_rule(
+        _datagram_adapter,
+        Direction::Out,
+        [&] {
+            while (not _tcp->segments_out().empty()) {
+                _datagram_adapter.write(_tcp->segments_out().front());
+                _tcp->segments_out().pop();
+            }
+        },
+        [&] { return not _tcp->segments_out().empty(); });
 }
 
 //! \brief Call [socketpair](\ref man2::socketpair) and return connected Unix-domain sockets of specified type
@@ -211,7 +213,7 @@ void TCPSpongeSocket<AdaptT>::connect(const TCPConfig &c_tcp, const FdAdapterCon
 
     _datagram_adapter.config_mut() = c_ad;
 
-    cerr << "DEBUG: Connecting to " << c_ad.destination.to_string() << "... ";
+    cerr << "DEBUG: Connecting to " << c_ad.destination.to_string() << "...\n";
     _tcp->connect();
 
     const TCPState expected_state = TCPState::State::SYN_SENT;
@@ -222,7 +224,7 @@ void TCPSpongeSocket<AdaptT>::connect(const TCPConfig &c_tcp, const FdAdapterCon
     }
 
     _tcp_loop([&] { return _tcp->state() == TCPState::State::SYN_SENT; });
-    cerr << "done.\n";
+    cerr << "Successfully connected to " << c_ad.destination.to_string() << ".\n";
 
     _tcp_thread = thread(&TCPSpongeSocket::_tcp_main, this);
 }
@@ -240,12 +242,12 @@ void TCPSpongeSocket<AdaptT>::listen_and_accept(const TCPConfig &c_tcp, const Fd
     _datagram_adapter.config_mut() = c_ad;
     _datagram_adapter.set_listening(true);
 
-    cerr << "DEBUG: Listening for incoming connection... ";
+    cerr << "DEBUG: Listening for incoming connection...\n";
     _tcp_loop([&] {
         const auto s = _tcp->state();
         return (s == TCPState::State::LISTEN or s == TCPState::State::SYN_RCVD or s == TCPState::State::SYN_SENT);
     });
-    cerr << "new connection from " << _datagram_adapter.config().destination.to_string() << ".\n";
+    cerr << "New connection from " << _datagram_adapter.config().destination.to_string() << ".\n";
 
     _tcp_thread = thread(&TCPSpongeSocket::_tcp_main, this);
 }
@@ -275,6 +277,9 @@ template class TCPSpongeSocket<TCPOverUDPSocketAdapter>;
 //! Specialization of TCPSpongeSocket for TCPOverIPv4OverTunFdAdapter
 template class TCPSpongeSocket<TCPOverIPv4OverTunFdAdapter>;
 
+//! Specialization of TCPSpongeSocket for TCPOverIPv4OverEthernetAdapter
+template class TCPSpongeSocket<TCPOverIPv4OverEthernetAdapter>;
+
 //! Specialization of TCPSpongeSocket for LossyTCPOverUDPSocketAdapter
 template class TCPSpongeSocket<LossyTCPOverUDPSocketAdapter>;
 
@@ -292,4 +297,35 @@ void CS144TCPSocket::connect(const Address &address) {
     multiplexer_config.destination = address;
 
     TCPOverIPv4SpongeSocket::connect(tcp_config, multiplexer_config);
+}
+
+static const string LOCAL_TAP_IP_ADDRESS = "169.254.10.9";
+static const string LOCAL_TAP_NEXT_HOP_ADDRESS = "169.254.10.1";
+
+EthernetAddress random_private_ethernet_address() {
+    EthernetAddress addr;
+    for (auto &byte : addr) {
+        byte = random_device()();  // use a random local Ethernet address
+    }
+    addr.at(0) |= 0x02;  // "10" in last two binary digits marks a private Ethernet address
+    addr.at(0) &= 0xfe;
+
+    return addr;
+}
+
+FullStackSocket::FullStackSocket()
+    : TCPOverIPv4OverEthernetSpongeSocket(TCPOverIPv4OverEthernetAdapter(TapFD("tap10"),
+                                                                         random_private_ethernet_address(),
+                                                                         Address(LOCAL_TAP_IP_ADDRESS, "0"),
+                                                                         Address(LOCAL_TAP_NEXT_HOP_ADDRESS, "0"))) {}
+
+void FullStackSocket::connect(const Address &address) {
+    TCPConfig tcp_config;
+    tcp_config.rt_timeout = 100;
+
+    FdAdapterConfig multiplexer_config;
+    multiplexer_config.source = {LOCAL_TAP_IP_ADDRESS, to_string(uint16_t(random_device()()))};
+    multiplexer_config.destination = address;
+
+    TCPOverIPv4OverEthernetSpongeSocket::connect(tcp_config, multiplexer_config);
 }
