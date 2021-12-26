@@ -44,6 +44,11 @@ class NetworkInterface {
     uint64_t _ms = 0;
 
     std::map<uint32_t, std::pair<EthernetAddress, uint64_t>> _cache{};
+    std::map<uint32_t, std::pair<std::vector<InternetDatagram>, uint64_t>> _wait_queues{};
+
+    void send_ipv4_frame(const InternetDatagram &dgram, const EthernetAddress &dst);
+
+    void send_arp_frame(uint16_t opcode, const EthernetAddress &target_ethernet_address, uint32_t target_ip_address);
 
   public:
     //! \brief Construct a network interface with given Ethernet (network-access-layer) and IP (internet-layer) addresses
