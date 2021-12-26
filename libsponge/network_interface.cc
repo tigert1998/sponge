@@ -34,11 +34,12 @@ void NetworkInterface::send_ipv4_frame(const InternetDatagram &dgram, const Ethe
 void NetworkInterface::send_arp_frame(uint16_t opcode,
                                       const EthernetAddress &target_ethernet_address,
                                       uint32_t target_ip_address) {
+    bool is_request = ARPMessage::OPCODE_REQUEST == opcode;
     ARPMessage arp_msg;
     arp_msg.opcode = opcode;
     arp_msg.sender_ethernet_address = _ethernet_address;
     arp_msg.sender_ip_address = _ip_address.ipv4_numeric();
-    arp_msg.target_ethernet_address = target_ethernet_address;
+    arp_msg.target_ethernet_address = is_request ? EthernetAddress{} : target_ethernet_address;
     arp_msg.target_ip_address = target_ip_address;
     EthernetFrame frame;
     frame.header().dst = target_ethernet_address;
@@ -58,15 +59,15 @@ void NetworkInterface::send_datagram(const InternetDatagram &dgram, const Addres
         auto ethernet_address = _cache[next_hop_ip].first;
         send_ipv4_frame(dgram, ethernet_address);
     } else {
-        if (_wait_queues.count(next_hop_ip) == 0 || _ms - _wait_queues[next_hop_ip].second >= 5 * 1000) {
-            send_arp_frame(ARPMessage::OPCODE_REQUEST, ETHERNET_BROADCAST, next_hop_ip);
-        }
-
         if (_wait_queues.count(next_hop_ip) == 0) {
+            send_arp_frame(ARPMessage::OPCODE_REQUEST, ETHERNET_BROADCAST, next_hop_ip);
             _wait_queues[next_hop_ip] = {std::vector{dgram}, _ms};
         } else {
             _wait_queues[next_hop_ip].first.push_back(dgram);
-            _wait_queues[next_hop_ip].second = _ms;
+            if (_ms - _wait_queues[next_hop_ip].second >= 5 * 1000) {
+                send_arp_frame(ARPMessage::OPCODE_REQUEST, ETHERNET_BROADCAST, next_hop_ip);
+                _wait_queues[next_hop_ip].second = _ms;
+            }
         }
     }
 }
