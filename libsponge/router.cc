@@ -34,9 +34,7 @@ void Router::route_one_datagram(InternetDatagram &dgram) {
     for (uint32_t i = 0; i < _routes.size(); i++) {
         uint32_t route_prefix;
         uint8_t prefix_length;
-        optional<Address> next_hop;
-        size_t interface_num;
-        tie(route_prefix, prefix_length, next_hop, interface_num) = _routes[i];
+        tie(route_prefix, prefix_length, ignore, ignore) = _routes[i];
 
         uint32_t mask_length = 32 - prefix_length;
         auto dgram_dst_masked = static_cast<uint64_t>(dgram.header().dst) >> mask_length;
@@ -59,7 +57,7 @@ void Router::route_one_datagram(InternetDatagram &dgram) {
 
     Address next_hop = get<2>(_routes[j.value()]) == nullopt ? Address::from_ipv4_numeric(dgram.header().dst)
                                                              : get<2>(_routes[j.value()]).value();
-    _interfaces[j.value()].send_datagram(dgram, next_hop);
+    _interfaces[get<3>(_routes[j.value()])].send_datagram(dgram, next_hop);
 }
 
 void Router::route() {
